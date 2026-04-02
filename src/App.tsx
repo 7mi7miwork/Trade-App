@@ -1,17 +1,25 @@
 import { useState } from 'react'
 import { useAnalysis } from './hooks/useAnalysis'
+import { useAiAnalysis } from './hooks/useAiAnalysis'
+import { useApiKeys, ApiProvider } from './hooks/useApiKeys'
+import { I18nProvider, useI18n } from './i18n/context'
+import { LanguageSwitcher } from './components/LanguageSwitcher'
+import { SettingsPage } from './components/SettingsPage'
 import { StockInput } from './components/StockInput'
 import { IndicatorSelector } from './components/IndicatorSelector'
 import { ResultsPanel } from './components/ResultsPanel'
 import { DownloadButton } from './components/DownloadButton'
 import { IndicatorKey } from './types'
 
-function App() {
-  const { results, isLoading, error, progress, runAnalysis, reset } = useAnalysis()
+const PERIOD_OPTIONS = [30, 60, 90, 180]
+
+function AppContent() {
+  const { t } = useI18n()
+  const { results, isLoading, error, progress, runAnalysis } = useAnalysis()
+  const { getAllKeys, hasKey } = useApiKeys()
+  const [currentPage, setCurrentPage] = useState<'main' | 'settings'>('main')
   const [periodDays, setPeriodDays] = useState(60)
-  const [indicators, setIndicators] = useState<Set<IndicatorKey>>(
-    new Set(['NATR', 'RSI', 'MACD', 'BBANDS'])
-  )
+  const [indicators, setIndicators] = useState<Set<IndicatorKey>>(new Set(['NATR']))
 
   const handleAnalyze = (codes: string[]) => {
     runAnalysis(codes, periodDays, indicators)
@@ -29,6 +37,29 @@ function App() {
     })
   }
 
+  const anyKeyConfigured = ['claude', 'gemini', 'grok', 'openai'].some(p => hasKey(p as ApiProvider))
+
+  if (currentPage === 'settings') {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
+        <header className="bg-white shadow-sm border-b border-slate-200">
+          <div className="max-w-7xl mx-auto px-4 py-4 sm:px-6 lg:px-8">
+            <div className="flex items-center justify-between">
+              <button
+                onClick={() => setCurrentPage('main')}
+                className="text-slate-600 hover:text-slate-800 text-sm font-medium"
+              >
+                {t.navBack}
+              </button>
+              <LanguageSwitcher />
+            </div>
+          </div>
+        </header>
+        <SettingsPage />
+      </div>
+    )
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
       {/* Header */}
@@ -36,12 +67,20 @@ function App() {
         <div className="max-w-7xl mx-auto px-4 py-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-2xl font-bold text-slate-900">📈 RoyaBot</h1>
-              <p className="text-sm text-slate-500">Taiwan-Aktienanalyse mit technischen Indikatoren</p>
+              <h1 className="text-2xl font-bold text-slate-900">{t.appTitle}</h1>
+              <p className="text-sm text-slate-500">{t.appSubtitle}</p>
             </div>
-            {results.length > 0 && (
-              <DownloadButton results={results} />
-            )}
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => setCurrentPage('settings')}
+                className="p-2 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition-colors"
+                title={t.navSettings}
+              >
+                ⚙️
+              </button>
+              {results.length > 0 && <DownloadButton results={results} />}
+              <LanguageSwitcher />
+            </div>
           </div>
         </div>
       </header>
@@ -56,6 +95,7 @@ function App() {
         <div className="bg-white rounded-xl shadow-sm p-6 mb-6">
           <IndicatorSelector
             periodDays={periodDays}
+            periodOptions={PERIOD_OPTIONS}
             onPeriodChange={setPeriodDays}
             indicators={indicators}
             onToggleIndicator={toggleIndicator}
@@ -77,7 +117,7 @@ function App() {
           <div className="bg-blue-50 border border-blue-200 rounded-xl p-6 mb-6 text-center">
             <div className="animate-spin inline-block w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full mb-2"></div>
             <p className="text-blue-700 font-medium">
-              Analysiere {progress.done}/{progress.total} Aktien...
+              {t.inputAnalyzeLoading} ({progress.done}/{progress.total})
             </p>
             <div className="mt-3 bg-blue-200 rounded-full h-2 max-w-sm mx-auto">
               <div
@@ -89,20 +129,29 @@ function App() {
         )}
 
         {/* Results */}
-        <ResultsPanel results={results} indicators={indicators} />
+        <ResultsPanel
+          results={results}
+          indicators={indicators}
+          anyKeyConfigured={anyKeyConfigured}
+          onGoToSettings={() => setCurrentPage('settings')}
+        />
       </main>
 
       {/* Footer */}
       <footer className="bg-white border-t border-slate-200 mt-8">
         <div className="max-w-7xl mx-auto px-4 py-4 sm:px-6 lg:px-8 text-center">
-          <p className="text-xs text-slate-400">
-            本工具僅供學習與研究目的，不構成投資建議。使用者應自行承擔投資風險。
-            Data provided by Yahoo Finance.
-          </p>
+          <p className="text-xs text-slate-400">{t.footerDisclaimer1}</p>
+          <p className="text-xs text-slate-400 mt-1">{t.footerDisclaimer2}</p>
         </div>
       </footer>
     </div>
   )
 }
 
-export default App
+export default function App() {
+  return (
+    <I18nProvider>
+      <AppContent />
+    </I18nProvider>
+  )
+}

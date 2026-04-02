@@ -1,16 +1,16 @@
 import {
+  ComposedChart,
   LineChart,
   Line,
-  ComposedChart,
   Bar,
   XAxis,
   YAxis,
-  CartesianGrid,
   Tooltip,
-  Legend,
   ResponsiveContainer,
   ReferenceLine,
   Area,
+  CartesianGrid,
+  Legend,
 } from 'recharts'
 import { ResultRow, IndicatorKey } from '../types'
 
@@ -19,21 +19,41 @@ interface StockChartProps {
   indicators: Set<IndicatorKey>
 }
 
-function formatNumber(value: number | null): string {
-  if (value === null) return '—'
-  return value.toFixed(2)
+const COLORS = {
+  close: '#3b82f6',
+  upper: '#94a3b8',
+  middle: '#22c55e',
+  lower: '#94a3b8',
+  macd: '#3b82f6',
+  signal: '#f59e0b',
+  histPos: '#22c55e',
+  histNeg: '#ef4444',
+}
+
+function formatTooltipNum(val: number | null | undefined): string {
+  if (val == null || isNaN(val)) return '—'
+  return val.toFixed(2)
 }
 
 function CustomTooltip({ active, payload, label }: any) {
   if (active && payload && payload.length) {
     return (
-      <div className="bg-slate-800 text-white text-xs rounded-lg p-2 shadow-lg">
-        <p className="font-semibold mb-1">{label}</p>
-        {payload.map((entry: any, index: number) => (
-          <p key={index} style={{ color: entry.color }}>
-            {entry.name}: {formatNumber(entry.value)}
-          </p>
-        ))}
+      <div className="bg-white/95 border border-slate-200 rounded-lg shadow-lg p-3 text-xs space-y-1">
+        <p className="font-bold text-slate-800">{label}</p>
+        {payload.map((entry: any, i: number) => {
+          const name = entry.name || entry.dataKey
+          const value = formatTooltipNum(entry.value)
+          return (
+            <p key={i} className="flex items-center gap-2">
+              <span
+                className="inline-block w-3 h-0.5 rounded"
+                style={{ backgroundColor: entry.stroke || entry.fill || '#999' }}
+              />
+              <span className="text-slate-600">{name}:</span>
+              <span className="font-mono font-bold">{value}</span>
+            </p>
+          )
+        })}
       </div>
     )
   }
@@ -41,174 +61,179 @@ function CustomTooltip({ active, payload, label }: any) {
 }
 
 export function StockChart({ rows, indicators }: StockChartProps) {
-  const data = rows.map((row) => ({
-    date: row.date,
-    close: row.close,
-    BB_upper: row.BB_upper,
-    BB_middle: row.BB_middle,
-    BB_lower: row.BB_lower,
-    MACD: row.MACD,
-    MACD_signal: row.MACD_signal,
-    MACD_hist: row.MACD_hist,
-    RSI: row.RSI,
-  }))
-
   const hasBB = indicators.has('BBANDS')
   const hasMACD = indicators.has('MACD')
   const hasRSI = indicators.has('RSI')
 
+  // Price Chart Data
+  const priceData = rows.map((r) => ({
+    date: r.date,
+    close: r.close,
+    BB_upper: hasBB ? r.BB_upper : undefined,
+    BB_middle: hasBB ? r.BB_middle : undefined,
+    BB_lower: hasBB ? r.BB_lower : undefined,
+  }))
+
   return (
-    <div className="space-y-4">
-      {/* Main Price Chart */}
-      <div className="bg-slate-50 rounded-lg p-3">
-        <ResponsiveContainer width="100%" height={280}>
-          <LineChart data={data}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+    <div className="space-y-6">
+      {/* Price + Bollinger Bands Chart */}
+      <div className="h-64">
+        <h4 className="text-sm font-semibold text-slate-700 mb-2">Preis & Bollinger Bands</h4>
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart data={priceData}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
             <XAxis
               dataKey="date"
-              tick={{ fontSize: 10 }}
-              tickFormatter={(value: string) => value.slice(5)}
+              tick={{ fontSize: 11 }}
+              tickFormatter={(val: string) => val.slice(5)}
             />
             <YAxis
               domain={['auto', 'auto']}
-              tick={{ fontSize: 10 }}
-              tickFormatter={(value: number) => value.toFixed(0)}
+              tick={{ fontSize: 11 }}
+              tickFormatter={(val: number) => val.toFixed(0)}
             />
             <Tooltip content={<CustomTooltip />} />
-            <Legend iconType="line" />
+            <Legend wrapperStyle={{ fontSize: '12px' }} />
+            <Line
+              type="monotone"
+              dataKey="close"
+              name="Close"
+              stroke={COLORS.close}
+              strokeWidth={1.5}
+              dot={false}
+              animationDuration={500}
+            />
             {hasBB && (
               <>
                 <Line
                   type="monotone"
-                  name="BB Upper"
                   dataKey="BB_upper"
-                  stroke="#94a3b8"
-                  strokeDasharray="5 5"
-                  dot={false}
+                  name="BB Upper"
+                  stroke={COLORS.upper}
+                  strokeDasharray="4 3"
                   strokeWidth={1}
+                  dot={false}
+                  connectNulls={false}
                 />
                 <Line
                   type="monotone"
-                  name="BB Middle"
                   dataKey="BB_middle"
-                  stroke="#64748b"
-                  strokeDasharray="5 5"
-                  dot={false}
+                  name="BB Middle"
+                  stroke={COLORS.middle}
+                  strokeDasharray="4 3"
                   strokeWidth={1}
+                  dot={false}
+                  connectNulls={false}
                 />
                 <Line
                   type="monotone"
-                  name="BB Lower"
                   dataKey="BB_lower"
-                  stroke="#94a3b8"
-                  strokeDasharray="5 5"
-                  dot={false}
+                  name="BB Lower"
+                  stroke={COLORS.lower}
+                  strokeDasharray="4 3"
                   strokeWidth={1}
+                  dot={false}
+                  connectNulls={false}
                 />
               </>
             )}
-            <Line
-              type="monotone"
-              name="Close"
-              dataKey="close"
-              stroke="#3b82f6"
-              dot={false}
-              strokeWidth={2}
-            />
           </LineChart>
         </ResponsiveContainer>
       </div>
 
-      {/* MACD Sub-Chart */}
+      {/* MACD Subchart */}
       {hasMACD && (
-        <div className="bg-slate-50 rounded-lg p-3">
-          <h4 className="text-sm font-semibold text-slate-700 mb-1">MACD</h4>
-          <ResponsiveContainer width="100%" height={160}>
-            <ComposedChart data={data}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+        <div className="h-48">
+          <h4 className="text-sm font-semibold text-slate-700 mb-2">MACD</h4>
+          <ResponsiveContainer width="100%" height="100%">
+            <ComposedChart
+              data={rows.map((r) => ({
+                date: r.date,
+                MACD: r.MACD,
+                MACD_signal: r.MACD_signal,
+                MACD_hist: r.MACD_hist,
+              }))}
+            >
+              <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
               <XAxis
                 dataKey="date"
-                tick={{ fontSize: 10 }}
-                tickFormatter={(value: string) => value.slice(5)}
+                tick={{ fontSize: 11 }}
+                tickFormatter={(val: string) => val.slice(5)}
               />
-              <YAxis tick={{ fontSize: 10 }} />
+              <YAxis tick={{ fontSize: 11 }} tickFormatter={(val: number) => val.toFixed(2)} />
               <Tooltip content={<CustomTooltip />} />
-              <Legend />
+              <Legend wrapperStyle={{ fontSize: '12px' }} />
               <Bar
-                name="MACD Hist"
                 dataKey="MACD_hist"
-                fill="#3b82f6"
-                radius={[2, 2, 0, 0]}
-              >
-                {data.map((entry, index) => (
-                  <rect
-                    key={index}
-                    fill={(entry.MACD_hist ?? 0) >= 0 ? '#22c55e' : '#ef4444'}
-                  />
-                ))}
-              </Bar>
-              <Line
-                type="monotone"
-                name="MACD"
-                dataKey="MACD"
-                stroke="#f59e0b"
-                dot={false}
-                strokeWidth={1.5}
+                name="MACD Histogram"
+                fill={COLORS.histPos}
+                stroke="none"
+                animationDuration={300}
               />
               <Line
                 type="monotone"
-                name="Signal"
-                dataKey="MACD_signal"
-                stroke="#8b5cf6"
+                dataKey="MACD"
+                name="MACD"
+                stroke={COLORS.macd}
+                strokeWidth={1.5}
                 dot={false}
-                strokeWidth={1}
+                connectNulls={false}
+              />
+              <Line
+                type="monotone"
+                dataKey="MACD_signal"
+                name="MACD Signal"
+                stroke={COLORS.signal}
+                strokeWidth={1.5}
+                dot={false}
+                connectNulls={false}
               />
             </ComposedChart>
           </ResponsiveContainer>
         </div>
       )}
 
-      {/* RSI Sub-Chart */}
+      {/* RSI Subchart */}
       {hasRSI && (
-        <div className="bg-slate-50 rounded-lg p-3">
-          <h4 className="text-sm font-semibold text-slate-700 mb-1">RSI</h4>
-          <ResponsiveContainer width="100%" height={140}>
-            <ComposedChart data={data}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+        <div className="h-40">
+          <h4 className="text-sm font-semibold text-slate-700 mb-2">RSI</h4>
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart
+              data={rows.map((r) => ({
+                date: r.date,
+                RSI: r.RSI,
+              }))}
+            >
+              <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
               <XAxis
                 dataKey="date"
-                tick={{ fontSize: 10 }}
-                tickFormatter={(value: string) => value.slice(5)}
+                tick={{ fontSize: 11 }}
+                tickFormatter={(val: string) => val.slice(5)}
               />
-              <YAxis domain={[0, 100]} tick={{ fontSize: 10 }} />
+              <YAxis
+                domain={[0, 100]}
+                tick={{ fontSize: 11 }}
+              />
               <Tooltip content={<CustomTooltip />} />
-              <Area
-                name="30-70 Zone"
-                dataKey={() => 50}
-                fill="none"
-                stroke="none"
-              />
-              <ReferenceLine y={70} stroke="#ef4444" strokeDasharray="3 3" />
-              <ReferenceLine y={30} stroke="#22c55e" strokeDasharray="3 3" />
+              <ReferenceLine y={70} stroke="#ef4444" strokeDasharray="4 3" />
+              <ReferenceLine y={30} stroke="#22c55e" strokeDasharray="4 3" />
               <Area
                 type="monotone"
-                name="RSI"
                 dataKey="RSI"
-                fill="#dbeafe"
-                stroke="#3b82f6"
+                fill="#e5e7eb"
+                opacity={0.3}
+                isAnimationActive={false}
+              />
+              <Line
+                type="monotone"
+                dataKey="RSI"
+                name="RSI"
+                stroke="#7c3aed"
                 strokeWidth={1.5}
-                connectNulls
+                dot={false}
+                connectNulls={false}
               />
-              {/* Shade area between 30 and 70 */}
-              <rect
-                x={0}
-                y={30}
-                width="100%"
-                height={40}
-                fill="#f1f5f9"
-                opacity={0.5}
-              />
-            </ComposedChart>
+            </LineChart>
           </ResponsiveContainer>
         </div>
       )}

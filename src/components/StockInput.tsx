@@ -15,7 +15,6 @@ export function StockInput({ onAnalyze, isLoading }: StockInputProps) {
   const [excelFileName, setExcelFileName] = useState<string | null>(null)
   const [excelError, setExcelError] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const isDragging = useRef(false)
   const [isDragOver, setIsDragOver] = useState(false)
 
   const parseManualCodes = useCallback((text: string): string[] => {
@@ -29,7 +28,7 @@ export function StockInput({ onAnalyze, isLoading }: StockInputProps) {
     try {
       const codes = await parseExcelForCodes(file)
       if (codes.length === 0) {
-        setExcelError('Keine gültigen Aktiencodes in der Excel-Datei gefunden')
+        setExcelError('Keine gültigen Aktiencodes in der Excel-Datei gefunden.')
         setExcelCodes([])
         setExcelFileName(null)
       } else {
@@ -37,7 +36,7 @@ export function StockInput({ onAnalyze, isLoading }: StockInputProps) {
         setExcelFileName(file.name)
       }
     } catch {
-      setExcelError('Fehler beim Lesen der Excel-Datei')
+      setExcelError('Excel-Datei konnte nicht gelesen werden. Stellen Sie sicher, dass es sich um eine gültige .xlsx- oder .xls-Datei handelt.')
       setExcelCodes([])
       setExcelFileName(null)
     }
@@ -51,7 +50,7 @@ export function StockInput({ onAnalyze, isLoading }: StockInputProps) {
     if (file && (file.name.endsWith('.xlsx') || file.name.endsWith('.xls'))) {
       handleExcelUpload(file)
     } else {
-      setExcelError('Bitte eine .xlsx oder .xls Datei hochladen')
+      setExcelError('Bitte eine gültige Excel-Datei (.xlsx bzw. .xls) hochladen.')
     }
   }, [])
 
@@ -86,7 +85,6 @@ export function StockInput({ onAnalyze, isLoading }: StockInputProps) {
   }
 
   const manualCodes = parseManualCodes(manualInput)
-
   const activeCodes = activeTab === 'excel' ? excelCodes : manualCodes
   const canSubmit = activeCodes.length > 0 && !isLoading
 
@@ -102,7 +100,7 @@ export function StockInput({ onAnalyze, isLoading }: StockInputProps) {
               : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
           }`}
         >
-          📁 Excel hochladen
+          Excel hochladen
         </button>
         <button
           onClick={() => setActiveTab('manual')}
@@ -112,7 +110,7 @@ export function StockInput({ onAnalyze, isLoading }: StockInputProps) {
               : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
           }`}
         >
-          ✏️ Manuell eingeben
+          Manuell eingeben
         </button>
       </div>
 
@@ -138,35 +136,31 @@ export function StockInput({ onAnalyze, isLoading }: StockInputProps) {
               className="hidden"
             />
             <div className="text-3xl mb-3">📊</div>
-            <p className="text-slate-600 font-medium">
-              Excel-Datei hierher ziehen oder klicken zum Auswählen
-            </p>
-            <p className="text-slate-400 text-sm mt-1">
-              .xlsx, .xls Formate unterstützt
-            </p>
+            <p className="text-slate-600 font-medium">Excel-Datei hierher ziehen</p>
+            <p className="text-slate-400 text-sm mt-1">oder klicken, um eine Datei auszuwählen</p>
           </div>
 
           {excelFileName && (
             <div className="mt-3 p-3 bg-green-50 border border-green-200 rounded-lg">
               <p className="text-green-700 text-sm">
-                ✅ {excelFileName} — {excelCodes.length} gültige Codes erkannt
+                {excelCodes.length} Codes erkannt aus: {excelFileName}
               </p>
             </div>
           )}
 
           {excelError && (
             <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg">
-              <p className="text-red-700 text-sm">⚠️ {excelError}</p>
+              <p className="text-red-700 text-sm">{excelError}</p>
             </div>
           )}
 
-          <div className="mt-3 flex items-center gap-2">
+          <div className="mt-3">
             <a
               href="/Trade-App/template.xlsx"
               download
               className="text-sm text-blue-600 hover:text-blue-800 underline"
             >
-              📥 Muster-Vorlage herunterladen
+              Muster-Vorlage herunterladen
             </a>
           </div>
         </div>
@@ -183,8 +177,8 @@ export function StockInput({ onAnalyze, isLoading }: StockInputProps) {
           />
           <div className="mt-2 text-sm text-slate-500">
             {manualCodes.length > 0
-              ? `${manualCodes.length} gültige Codes erkannt: ${manualCodes.join(', ')}`
-              : 'Keine gültigen Codes erkannt'}
+              ? `${manualCodes.length} gültige Codes erkannt`
+              : ''}
           </div>
         </div>
       )}
@@ -203,10 +197,10 @@ export function StockInput({ onAnalyze, isLoading }: StockInputProps) {
           {isLoading ? (
             <span className="flex items-center gap-2">
               <span className="animate-spin inline-block w-4 h-4 border-2 border-current border-t-transparent rounded-full"></span>
-              Wird analysiert...
+              Analysiere…
             </span>
           ) : (
-            '🔍 Analysieren'
+            'Analyse starten'
           )}
         </button>
       </div>

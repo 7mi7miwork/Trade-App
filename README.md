@@ -1,82 +1,92 @@
-# RoyaBot — Taiwan Stock Analysis Web App
+# RoyaBot — Taiwan Stock Analysis (台股分析)
 
-**Live URL:** https://7mi7miwork.github.io/Trade-App/
+A Taiwan stock analysis web app powered by Yahoo Finance data and AI insights from Claude, Gemini, Grok, and OpenAI.
 
-## Description
+**Live Demo:** https://7mi7miwork.github.io/Trade-App/
 
-A free, client-side Taiwan stock analysis tool that runs entirely in the browser. No backend required — deployed as a static site on GitHub Pages.
+## Features
 
-### Features
-
-- **Excel Upload** — Import stock codes from .xlsx/.xls files via drag-and-drop
-- **Manual Input** — Enter stock codes directly (comma, space, or newline separated)
-- **Technical Indicators** — Calculate in-browser:
-  - **NATR** (Normalized Average True Range) — Volatility indicator
-  - **RSI** (Relative Strength Index) — Overbought/Oversold detection
-  - **MACD** (Moving Average Convergence Divergence) — Trend-following
-  - **Bollinger Bands** — Volatility-based support/resistance bands
-- **Interactive Charts** — Powered by Recharts with tooltips and multi-axis views
-- **Excel Export** — Download individual stock data or all results as .xlsx
+- 📊 **Technical Indicators:** NATR, RSI, MACD, Bollinger Bands
+- 🤖 **AI Analysis:** Claude, Gemini, Grok, OpenAI — compare results side-by-side
+- 🌐 **Bilingual:** EN + 繁體中文
+- 📥 **Excel Upload/Download:** Batch stock input and export
+- 🚀 **Zero-cost Deployment:** GitHub Pages
 
 ## Local Development
 
 ```bash
-cd "C:\Users\user\Documents\codes\Trading app"
 npm install
 npm run dev
 ```
 
-Open http://localhost:5173/ in your browser.
+The app runs at `http://localhost:5173/Trade-App/` (or `/` depending on your vite config).
 
-## Build
+## API Key Setup
+
+### Option 1: Local Development via `.env`
+
+Copy `.env.example` to `.env` and fill in your keys:
 
 ```bash
-npm run build
+cp .env.example .env
 ```
 
-Output goes to `dist/` directory.
+Required keys (only the ones you plan to use):
+
+| Provider | Key Variable | Get Key |
+|---|---|---|
+| Claude | `VITE_ANTHROPIC_API_KEY` | https://console.anthropic.com/settings/keys |
+| Gemini | `VITE_GEMINI_API_KEY` | https://aistudio.google.com/apikey |
+| Grok | `VITE_GROK_API_KEY` | https://console.x.ai/ |
+| OpenAI | `VITE_OPENAI_API_KEY` | https://platform.openai.com/api-keys |
+
+**💡 Free Start:** Gemini `gemini-1.5-flash` has a **free tier** (15 requests/min, 1M tokens/day) — no credit card required.
+
+### Option 2: GitHub Pages via UI Settings
+
+On the live site, go to Settings (⚙️) and enter your API keys directly in the browser. Keys are stored in `localStorage` and never sent to any server.
+
+## Indicators
+
+| Indicator | Description |
+|---|---|
+| **NATR** | Normalized Average True Range — volatility relative to price (14-period) |
+| **RSI** | Relative Strength Index — overbought (>70) / oversold (<30) signal (14-period) |
+| **MACD** | Moving Average Convergence Divergence — MACD line, Signal line, Histogram (12,26,9) |
+| **Bollinger Bands** | SMA(20) ± 2×StdDev — mean reversion / volatility bands |
+
+## AI Models
+
+| Provider | Model | Notes |
+|---|---|---|
+| Claude | `claude-haiku-4-5-20251001` | Fast, cost-effective |
+| Gemini | `gemini-1.5-flash` | ✅ Free tier available |
+| Grok | `grok-3-mini` | xAI's lightweight model |
+| OpenAI | `gpt-4o-mini` | Reliable, versatile |
 
 ## Deployment
 
-Automatic via GitHub Actions on every push to `main` branch.
+1. Push to `main` branch
+2. GitHub Actions automatically builds and deploys
+3. Enable GitHub Pages: Settings → Pages → Source: GitHub Actions
 
-### One-time setup (manual):
+## Project Structure
 
-1. Go to GitHub → Repo → **Settings** → **Pages**
-2. **Source:** Select "GitHub Actions" (not "Deploy from a branch")
-3. Save
-
-After the first push, the app auto-deploys to:
-**https://7mi7miwork.github.io/Trade-App/**
-
-## Tech Stack
-
-| Component | Technology |
-|-----------|------------|
-| Framework | React 18 + TypeScript |
-| Build Tool | Vite |
-| Styling | Tailwind CSS |
-| Charts | Recharts |
-| Excel | SheetJS (xlsx) |
-| Data Source | Yahoo Finance (query1.finance.yahoo.com) |
-| Deployment | GitHub Actions → GitHub Pages |
-
-## Indicators Explained
-
-### NATR (Normalized Average True Range)
-Measures volatility relative to price. Higher values indicate more volatile stocks. Calculated as `(ATR / Close) × 100` where ATR uses Wilder's smoothing over 14 periods.
-
-### RSI (Relative Strength Index)
-Momentum oscillator measuring speed and magnitude of price changes. RSI above 70 suggests overbought conditions; below 30 suggests oversold. Uses Wilder's smoothing over 14 periods.
-
-### MACD
-Trend-following momentum indicator. MACD Line = EMA(12) − EMA(26). Signal Line = EMA(9) of MACD Line. Histogram = MACD − Signal.
-
-### Bollinger Bands
-Volatility bands placed above and below a moving average. Upper = MA + 2σ, Lower = MA − 2σ. Width expands/contracts with volatility.
+```
+Trading app/
+├── src/
+│   ├── i18n/          # Language files (en, zh-TW) and context
+│   ├── components/    # React UI components
+│   ├── services/      # Yahoo Finance, technical indicators, AI providers
+│   ├── hooks/         # Custom React hooks (analysis, API keys)
+│   ├── utils/         # Prompt builder
+│   └── types/         # TypeScript type definitions
+├── public/            # Static assets (template.xlsx)
+└── .github/workflows/ # GitHub Actions deploy
+```
 
 ## Disclaimer
 
 本工具僅供學習與研究目的，不構成投資建議。使用者應自行承擔投資風險。
-
-Data provided by Yahoo Finance. All times shown in Asia/Taipei (UTC+8).
+Data provided by Yahoo Finance. AI analysis by Claude, Gemini, Grok, and/or OpenAI.
+All times shown in Asia/Taipei (UTC+8).

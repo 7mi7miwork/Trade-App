@@ -2,39 +2,18 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Custom scrollbar for tables */
-.scrollbar-thin::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+@layer base {
+  body {
+    @apply bg-slate-50 text-slate-900 antialiased;
+  }
 }
 
-.scrollbar-thin::-webkit-scrollbar-track {
-  background: #f1f5f9;
-  border-radius: 3px;
-}
+@layer components {
+  .btn-primary {
+    @apply px-6 py-2.5 bg-blue-500 text-white font-medium text-sm rounded-lg hover:bg-blue-600 transition-colors disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed;
+  }
 
-.scrollbar-thin::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
-  border-radius: 3px;
-}
-
-.scrollbar-thin::-webkit-scrollbar-thumb:hover {
-  background: #94a3b8;
-}
-
-/* Recharts tooltip styling */
-.recharts-default-tooltip {
-  background-color: #1e293b !important;
-  border: none !important;
-  border-radius: 0.5rem !important;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1) !important;
-}
-
-.recharts-tooltip-label {
-  color: #f8fafc !important;
-  font-weight: 600 !important;
-}
-
-.recharts-tooltip-item {
-  color: #e2e8f0 !important;
+  .btn-secondary {
+    @apply px-4 py-2 bg-slate-100 text-slate-700 font-medium text-sm rounded-lg hover:bg-slate-200 transition-colors;
+  }
 }

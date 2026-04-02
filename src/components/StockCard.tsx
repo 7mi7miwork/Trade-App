@@ -1,236 +1,307 @@
-import { useState } from 'react'
+import * as XLSX from 'xlsx'
+import { useState, useCallback } from 'react'
 import { StockResult, IndicatorKey, ResultRow } from '../types'
 import { StockChart } from './StockChart'
-import * as XLSX from 'xlsx'
+import { AiComparisonTable } from './AiComparisonTable'
+import { AiProviderBadge } from './AiProviderBadge'
+import { AiProvider } from '../services/ai/types'
+import { useI18n } from '../i18n/context'
+import { useAiAnalysis } from '../hooks/useAiAnalysis'
+import { buildAnalysisPrompt } from '../utils/buildPrompt'
 
 interface StockCardProps {
   result: StockResult
   indicators: Set<IndicatorKey>
+  anyKeyConfigured: boolean
+  onGoToSettings: () => void
 }
 
-type SortColumn = 'date' | 'open' | 'high' | 'low' | 'close' | 'volume'
-type SortDirection = 'asc' | 'desc'
+type SortKey = keyof ResultRow
+type SortDir = 'asc' | 'desc'
 
-const INDICATOR_COLUMNS: { key: keyof ResultRow; label: string }[] = [
-  { key: 'NATR', label: 'NATR' },
-  { key: 'RSI', label: 'RSI' },
-  { key: 'MACD', label: 'MACD' },
-  { key: 'MACD_signal', label: 'MACD Signal' },
-  { key: 'MACD_hist', label: 'MACD Hist' },
-  { key: 'BB_upper', label: 'BB Upper' },
-  { key: 'BB_middle', label: 'BB Middle' },
-  { key: 'BB_lower', label: 'BB Lower' },
-]
+function formatNumber(val: number | null): string {
+  if (val === null) return '—'
+  return val.toFixed(2)
+}
 
-export function StockCard({ result, indicators }: StockCardProps) {
-  const [isExpanded, setIsExpanded] = useState(false)
-  const [sortColumn, setSortColumn] = useState<SortColumn>('date')
-  const [sortDirection, setSortDirection] = useState<SortDirection>('desc')
-  const [showAllRows, setShowAllRows] = useState(false)
+function formatVolume(val: number): string {
+  if (val >= 1e6) return (val / 1e6).toFixed(1) + 'M'
+  if (val >= 1e3) return (val / 1e3).toFixed(1) + 'K'
+  return val.toString()
+}
 
-  const handleSort = (column: SortColumn) => {
-    if (sortColumn === column) {
-      setSortDirection((prev) => (prev === 'asc' ? 'desc' : 'asc'))
+const CONFIGURED_PROVIDERS: AiProvider[] = ['claude', 'gemini', 'grok', 'openai']
+
+export function StockCard({ result, indicators, anyKeyConfigured, onGoToSettings }: StockCardProps) {
+  const { t } = useI18n()
+  const { results, isLoading, loadingProviders, runAnalysis } = useAiAnalysis()
+  const [isOpen, setIsOpen] = useState(false)
+  const [showAiAnalysis, setShowAiAnalysis] = useState(false)
+  const [sortKey, setSortKey] = useState<SortKey>('date')
+  const [sortDir, setSortDir] = useState<SortDir>('desc')
+  const [showRows, setShowRows] = useState(60)
+
+  const { code, rows, error } = result
+  const displayName = result.name || code
+
+  const handleSort = (key: SortKey) => {
+    if (sortKey === key) {
+      setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))
     } else {
-      setSortColumn(column)
-      setSortDirection('desc')
+      setSortKey(key)
+      setSortDir('desc')
     }
   }
 
-  const handleDownload = () => {
-    const rows = result.rows.map((row) => ({
-      Datum: row.date,
-      Open: row.open,
-      High: row.high,
-      Low: row.low,
-      Close: row.close,
-      Volumen: row.volume,
-      ...(indicators.has('NATR') ? { NATR: row.NATR ?? null } : {}),
-      ...(indicators.has('RSI') ? { RSI: row.RSI ?? null } : {}),
-      ...(indicators.has('MACD')
-        ? { MACD: row.MACD ?? null, 'MACD Signal': row.MACD_signal ?? null, 'MACD Hist': row.MACD_hist ?? null }
-        : {}),
-      ...(indicators.has('BBANDS')
-        ? { 'BB Upper': row.BB_upper ?? null, 'BB Middle': row.BB_middle ?? null, 'BB Lower': row.BB_lower ?? null }
-        : {}),
-    }))
+  const sortedRows = [...rows].sort((a, b) => {
+    const aVal = a[sortKey]
+    const bVal = b[sortKey]
+    if (aVal === null && bVal === null) return 0
+    if (aVal === null) return sortDir === 'asc' ? -1 : 1
+    if (bVal === null) return sortDir === 'asc' ? 1 : -1
+    if (typeof aVal === 'string' && typeof bVal === 'string') {
+      return sortDir === 'asc' ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal)
+    }
+    const aNum = aVal as number
+    const bNum = bVal as number
+    return sortDir === 'asc' ? aNum - bNum : bNum - aNum
+  })
 
-    const ws = XLSX.utils.json_to_sheet(rows)
-    const wb = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(wb, ws, result.code)
+  const visibleRows = sortedRows.slice(0, showRows)
 
-    const today = new Date().toISOString().slice(0, 10)
-    XLSX.writeFile(wb, `${result.code}_${today}.xlsx`)
+  const indicatorColumns: { key: SortKey; label: string }[] = []
+  if (indicators.has('NATR')) indicatorColumns.push({ key: 'NATR', label: 'NATR' })
+  if (indicators.has('RSI')) indicatorColumns.push({ key: 'RSI', label: 'RSI' })
+  if (indicators.has('MACD')) {
+    indicatorColumns.push({ key: 'MACD', label: 'MACD' })
+    indicatorColumns.push({ key: 'MACD_signal', label: 'MACD Signal' })
+    indicatorColumns.push({ key: 'MACD_hist', label: 'MACD Hist' })
+  }
+  if (indicators.has('BBANDS')) {
+    indicatorColumns.push({ key: 'BB_upper', label: 'BB Upper' })
+    indicatorColumns.push({ key: 'BB_middle', label: 'BB Middle' })
+    indicatorColumns.push({ key: 'BB_lower', label: 'BB Lower' })
   }
 
-  if (result.error) {
+  const handleDownload = () => {
+    if (rows.length === 0) return
+    const { utils, write } = XLSX
+    const headerRow = [
+      '日期', 'Open', 'High', 'Low', 'Close', 'Volume',
+      ...indicatorColumns.map((c) => c.label),
+    ]
+    const dataRows = sortedRows.map((r) => [
+      r.date,
+      r.open,
+      r.high,
+      r.low,
+      r.close,
+      r.volume,
+      ...indicatorColumns.map((c) => {
+        const val = r[c.key as keyof ResultRow]
+        return val === null ? '—' : val
+      }),
+    ])
+    const ws = utils.aoa_to_sheet([headerRow, ...dataRows])
+    const wb = utils.book_new()
+    utils.book_append_sheet(wb, ws, code)
+    const now = new Date()
+    const dateStr = now.toISOString().slice(0, 10)
+    const fileName = `${code}_${dateStr}.xlsx`
+    const wbout = write(wb, { bookType: 'xlsx', type: 'array' })
+    const blob = new Blob([wbout], { type: 'application/octet-stream' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = fileName
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  }
+
+  const handleAiAnalysis = useCallback(() => {
+    if (!anyKeyConfigured) return
+    runAnalysis({
+      stockCode: code,
+      stockName: displayName,
+      rows,
+      selectedIndicators: Array.from(indicators) as IndicatorKey[],
+      lang: 'zh-TW',
+    })
+    setShowAiAnalysis(true)
+  }, [runAnalysis, code, displayName, rows, indicators, anyKeyConfigured])
+
+  if (error) {
     return (
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-        <div className="p-4 flex items-center gap-3">
-          <span className="px-2 py-1 bg-slate-100 text-slate-700 font-mono font-bold rounded text-sm">
-            {result.code}
-          </span>
-          <span className="px-2 py-1 bg-red-100 text-red-700 text-xs font-medium rounded-full">
-            Fehler
-          </span>
-        </div>
-        <div className="mx-4 mb-4 bg-amber-50 border border-amber-200 rounded-lg p-3">
-          <div className="flex items-start gap-2">
-            <span className="text-amber-600">⚠️</span>
-            <p className="text-amber-800 text-sm">{result.error}</p>
+        <button
+          onClick={() => setIsOpen(!isOpen)}
+          className="w-full flex items-center justify-between p-4 hover:bg-slate-50 transition-colors"
+        >
+          <div className="flex items-center gap-3">
+            <span className="font-semibold text-lg text-slate-900">{code}</span>
+            <span className="px-2 py-0.5 bg-red-100 text-red-700 text-xs rounded-full font-medium">
+              {t.error}
+            </span>
           </div>
-        </div>
+          <span className="text-slate-400">{isOpen ? '▲' : '▼'}</span>
+        </button>
+        {isOpen && (
+          <div className="px-4 pb-4">
+            <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+              <p className="text-yellow-800">
+                ⚠️ {(t.errorLoadingData as (err: string) => string)(error)}
+              </p>
+            </div>
+          </div>
+        )}
       </div>
     )
   }
 
-  const displayRows = showAllRows ? result.rows : result.rows.slice(0, 60)
+  if (rows.length === 0) return null
 
-  const sortedRows = [...displayRows].sort((a, b) => {
-    let aVal: any = a[sortColumn]
-    let bVal: any = b[sortColumn]
-
-    if (aVal === null) return 1
-    if (bVal === null) return -1
-
-    if (typeof aVal === 'string') {
-      return sortDirection === 'asc'
-        ? aVal.localeCompare(bVal)
-        : bVal.localeCompare(aVal)
-    }
-    return sortDirection === 'asc' ? aVal - bVal : bVal - aVal
-  })
-
-  const sortIcon = (column: SortColumn) => {
-    if (sortColumn !== column) return ' ↕'
-    return sortDirection === 'asc' ? ' ↑' : ' ↓'
-  }
-
-  const visibleIndicators = INDICATOR_COLUMNS.filter((col) => {
-    if (col.key === 'MACD' || col.key === 'MACD_signal' || col.key === 'MACD_hist') {
-      return indicators.has('MACD')
-    }
-    if (col.key === 'BB_upper' || col.key === 'BB_middle' || col.key === 'BB_lower') {
-      return indicators.has('BBANDS')
-    }
-    return indicators.has(col.key as IndicatorKey)
-  })
+  const latestDate = sortedRows[0]?.date || ''
+  const latestClose = sortedRows[0]?.close ?? null
 
   return (
     <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
       {/* Header */}
-      <div className="p-4 flex items-center justify-between border-b border-slate-100">
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => setIsExpanded(!isExpanded)}
-            className="text-slate-400 hover:text-slate-600 transition-colors"
-          >
-            {isExpanded ? '▼' : '▶'}
-          </button>
-          <span className="px-2 py-1 bg-blue-50 text-blue-700 font-mono font-bold rounded text-sm">
-            {result.code}
-          </span>
-          {result.name && (
-            <span className="text-sm text-slate-500">{result.name}</span>
-          )}
-        </div>
+      <div className="flex items-center justify-between p-4 border-b border-slate-100">
         <button
-          onClick={handleDownload}
-          className="flex items-center gap-1 px-3 py-1.5 bg-emerald-500 text-white text-xs font-medium rounded-lg hover:bg-emerald-600 transition-colors"
+          onClick={() => setIsOpen(!isOpen)}
+          className="flex items-center gap-3"
         >
-          📥 Excel
+          <span className="font-semibold text-lg text-slate-900">{code}</span>
+          {latestClose !== null && (
+            <span className="text-slate-500 text-sm">
+              {latestClose.toFixed(2)} TWD ({latestDate})
+            </span>
+          )}
         </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleDownload}
+            className="px-3 py-1.5 text-sm bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition-colors"
+          >
+            📥 {t.download}
+          </button>
+          <span className="text-slate-400 cursor-pointer">{isOpen ? '▲' : '▼'}</span>
+        </div>
       </div>
 
-      {/* Charts (when expanded) */}
-      {isExpanded && (
-        <div className="p-4 border-b border-slate-100">
-          <StockChart rows={result.rows} indicators={indicators} />
-        </div>
-      )}
+      {/* Expandable Content */}
+      {isOpen && (
+        <div className="p-4 space-y-4">
+          {/* Charts */}
+          <StockChart rows={rows} indicators={indicators} />
 
-      {/* Data Table */}
-      {isExpanded && result.rows.length > 0 && (
-        <div className="p-4">
-          <div className="flex items-center justify-between mb-3">
-            <h4 className="text-sm font-semibold text-slate-700">Preistabelle</h4>
-            {!showAllRows && result.rows.length > 60 && (
+          {/* AI Analysis Section */}
+          <div className="border-t border-slate-100 pt-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <h4 className="text-sm font-semibold text-slate-700">
+                🤖 AI {t.aiAnalyseButtonShort}
+              </h4>
+              <div className="flex items-center gap-2">
+                {CONFIGURED_PROVIDERS.map((p) => (
+                  <AiProviderBadge key={p} provider={p} size="sm" />
+                ))}
+              </div>
+            </div>
+
+            {anyKeyConfigured ? (
               <button
-                onClick={() => setShowAllRows(true)}
-                className="text-xs text-blue-600 hover:text-blue-800"
+                onClick={handleAiAnalysis}
+                disabled={isLoading}
+                className={`w-full py-2.5 rounded-lg font-medium text-sm transition-colors ${
+                  isLoading
+                    ? 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                    : 'bg-gradient-to-r from-purple-500 to-blue-500 text-white hover:from-purple-600 hover:to-blue-600'
+                }`}
               >
-                Alle {result.rows.length} Zeilen anzeigen
+                {isLoading ? t.aiLoading : t.aiAnalyseButton}
               </button>
+            ) : (
+              <div className="bg-slate-50 rounded-lg p-4 text-center">
+                <p className="text-sm text-slate-500">{t.aiNoKeysConfigured}</p>
+                <button
+                  onClick={onGoToSettings}
+                  className="text-sm text-blue-600 hover:text-blue-800 underline mt-2"
+                >
+                  {t.aiConfigureLink}
+                </button>
+              </div>
+            )}
+
+            {/* AI Comparison Table */}
+            {(showAiAnalysis || Object.keys(results).length > 0) && (
+              <AiComparisonTable
+                results={results}
+                isLoading={isLoading}
+                loadingProviders={loadingProviders}
+                onGoToSettings={onGoToSettings}
+              />
             )}
           </div>
-          <div className="overflow-x-auto scrollbar-thin">
-            <table className="w-full text-xs">
-              <thead className="bg-slate-50">
-                <tr>
-                  <th
-                    className="px-3 py-2 text-left font-semibold text-slate-600 cursor-pointer hover:bg-slate-100"
-                    onClick={() => handleSort('date')}
-                  >
-                    Datum{sortIcon('date')}
-                  </th>
-                  <th
-                    className="px-3 py-2 text-right font-semibold text-slate-600 cursor-pointer hover:bg-slate-100"
-                    onClick={() => handleSort('open')}
-                  >
-                    Open{sortIcon('open')}
-                  </th>
-                  <th
-                    className="px-3 py-2 text-right font-semibold text-slate-600 cursor-pointer hover:bg-slate-100"
-                    onClick={() => handleSort('high')}
-                  >
-                    High{sortIcon('high')}
-                  </th>
-                  <th
-                    className="px-3 py-2 text-right font-semibold text-slate-600 cursor-pointer hover:bg-slate-100"
-                    onClick={() => handleSort('low')}
-                  >
-                    Low{sortIcon('low')}
-                  </th>
-                  <th
-                    className="px-3 py-2 text-right font-semibold text-slate-600 cursor-pointer hover:bg-slate-100"
-                    onClick={() => handleSort('close')}
-                  >
-                    Close{sortIcon('close')}
-                  </th>
-                  <th
-                    className="px-3 py-2 text-right font-semibold text-slate-600 cursor-pointer hover:bg-slate-100"
-                    onClick={() => handleSort('volume')}
-                  >
-                    Volumen{sortIcon('volume')}
-                  </th>
-                  {visibleIndicators.map((col) => (
+
+          {/* Data Table */}
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-slate-50">
+                  {[
+                    { key: 'date' as SortKey, label: '日期' },
+                    { key: 'open' as SortKey, label: 'Open' },
+                    { key: 'high' as SortKey, label: 'High' },
+                    { key: 'low' as SortKey, label: 'Low' },
+                    { key: 'close' as SortKey, label: 'Close' },
+                    { key: 'volume' as SortKey, label: 'Volume' },
+                    ...indicatorColumns,
+                  ].map((col) => (
                     <th
                       key={col.key}
-                      className="px-3 py-2 text-right font-semibold text-slate-600"
+                      onClick={() => handleSort(col.key)}
+                      className="px-3 py-2 text-left font-medium text-slate-600 cursor-pointer hover:bg-slate-100 select-none"
                     >
                       {col.label}
+                      {sortKey === col.key && (
+                        <span className="ml-1 text-slate-400">{sortDir === 'asc' ? '↑' : '↓'}</span>
+                      )}
                     </th>
                   ))}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
-                {sortedRows.map((row) => (
-                  <tr key={row.date} className="hover:bg-slate-50">
-                    <td className="px-3 py-2 font-mono">{row.date}</td>
-                    <td className="px-3 py-2 text-right">{row.open.toFixed(2)}</td>
-                    <td className="px-3 py-2 text-right">{row.high.toFixed(2)}</td>
-                    <td className="px-3 py-2 text-right">{row.low.toFixed(2)}</td>
-                    <td className="px-3 py-2 text-right">{row.close.toFixed(2)}</td>
-                    <td className="px-3 py-2 text-right">{row.volume.toLocaleString()}</td>
-                    {visibleIndicators.map((col) => (
-                      <td key={col.key} className="px-3 py-2 text-right text-slate-500">
-                        {row[col.key] !== null ? (row[col.key] as number).toFixed(2) : '—'}
-                      </td>
-                    ))}
+              <tbody>
+                {visibleRows.map((row, i) => (
+                  <tr
+                    key={row.date}
+                    className={`${i % 2 === 0 ? 'bg-white' : 'bg-slate-50'} hover:bg-slate-100`}
+                  >
+                    <td className="px-3 py-2 font-medium">{row.date}</td>
+                    <td className="px-3 py-2">{formatNumber(row.open)}</td>
+                    <td className="px-3 py-2">{formatNumber(row.high)}</td>
+                    <td className="px-3 py-2">{formatNumber(row.low)}</td>
+                    <td className="px-3 py-2">{formatNumber(row.close)}</td>
+                    <td className="px-3 py-2">{formatVolume(row.volume)}</td>
+                    {indicatorColumns.map((col) => {
+                      const val = row[col.key as keyof ResultRow] as number | null
+                      return <td key={col.key} className="px-3 py-2">{formatNumber(val)}</td>
+                    })}
                   </tr>
                 ))}
               </tbody>
             </table>
+            {sortedRows.length > showRows && (
+              <div className="mt-2 text-center">
+                <button
+                  onClick={() => setShowRows((r) => Math.min(r + 60, sortedRows.length))}
+                  className="text-sm text-blue-600 hover:text-blue-800 underline"
+                >
+                  {(t.moreRows as (count: number) => string)(sortedRows.length - showRows)}
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}
